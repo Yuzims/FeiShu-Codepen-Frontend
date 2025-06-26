@@ -142,7 +142,7 @@ export const cssSnippetCompletionSource: CompletionSource = (context: Completion
   // 检查是否在属性值中（冒号后面）
   const inPropertyValue = /:\s*[^;]*$/.test(beforeCursor);
 
-  // 如果在属性值中，优先提供单位补全
+  // 如果在属性值中，优先提供单位补全和属性值补全
   if (inPropertyValue) {
     // 改进的数字匹配逻辑，避免重复触发
     const numberMatch = beforeCursor.match(/(\d+(?:\.\d+)?)\s*$/);
@@ -178,6 +178,72 @@ export const cssSnippetCompletionSource: CompletionSource = (context: Completion
           boost: 99 // 提高优先级
         })),
         validFor: /^$/ // 只在没有后续字符时有效
+      };
+    }
+
+    // 在属性值中提供常见属性值补全（不带分号）
+    // 获取当前属性名以提供相关的属性值
+    const propertyMatch = beforeCursor.match(/(\w+)\s*:\s*[^;]*$/);
+    let propertyName = '';
+    if (propertyMatch) {
+      propertyName = propertyMatch[1];
+    }
+
+    // 根据属性名提供相应的属性值
+    const getPropertyValues = (prop: string) => {
+      const commonValues: { [key: string]: string[] } = {
+        'display': ['block', 'inline', 'inline-block', 'flex', 'inline-flex', 'grid', 'inline-grid', 'table', 'table-cell', 'none'],
+        'position': ['static', 'relative', 'absolute', 'fixed', 'sticky'],
+        'text-align': ['left', 'right', 'center', 'justify', 'start', 'end'],
+        'font-weight': ['normal', 'bold', 'bolder', 'lighter', '100', '200', '300', '400', '500', '600', '700', '800', '900'],
+        'font-style': ['normal', 'italic', 'oblique'],
+        'text-decoration': ['none', 'underline', 'overline', 'line-through'],
+        'text-transform': ['none', 'uppercase', 'lowercase', 'capitalize'],
+        'color': ['red', 'blue', 'green', 'black', 'white', 'gray', 'transparent', 'inherit', 'currentColor'],
+        'background-color': ['transparent', 'white', 'black', 'red', 'blue', 'green', 'gray', 'inherit'],
+        'border-style': ['none', 'solid', 'dashed', 'dotted', 'double', 'groove', 'ridge', 'inset', 'outset'],
+        'overflow': ['visible', 'hidden', 'scroll', 'auto'],
+        'white-space': ['normal', 'nowrap', 'pre', 'pre-wrap', 'pre-line'],
+        'vertical-align': ['baseline', 'top', 'middle', 'bottom', 'text-top', 'text-bottom'],
+        'flex-direction': ['row', 'row-reverse', 'column', 'column-reverse'],
+        'justify-content': ['flex-start', 'flex-end', 'center', 'space-between', 'space-around', 'space-evenly'],
+        'align-items': ['stretch', 'flex-start', 'flex-end', 'center', 'baseline'],
+        'background-repeat': ['repeat', 'repeat-x', 'repeat-y', 'no-repeat'],
+        'background-size': ['auto', 'cover', 'contain'],
+        'background-position': ['left', 'center', 'right', 'top', 'bottom'],
+        'cursor': ['auto', 'pointer', 'text', 'move', 'not-allowed', 'grab', 'grabbing'],
+        'visibility': ['visible', 'hidden', 'collapse']
+      };
+
+      return commonValues[prop] || [];
+    };
+
+    // 通用常见属性值（适用于多个属性）
+    const commonPropertyValues = [
+      'auto', 'none', 'inherit', 'initial', 'unset', 'normal', 'bold', 'center', 'left', 'right',
+      'top', 'bottom', 'middle', 'block', 'inline', 'flex', 'grid', 'absolute', 'relative',
+      'fixed', 'static', 'hidden', 'visible', 'transparent', 'solid', 'pointer', 'text'
+    ];
+
+    // 获取特定属性的值和通用值
+    const specificValues = getPropertyValues(propertyName);
+    const allValues = [...specificValues, ...commonPropertyValues.filter(v => !specificValues.includes(v))];
+
+    // 过滤匹配的值
+    const matchedValues = allValues.filter(value => 
+      value.toLowerCase().startsWith(word.text.toLowerCase())
+    );
+
+    if (matchedValues.length > 0) {
+      return {
+        from: word.from,
+        options: matchedValues.map(value => ({
+          label: value,
+          apply: value, // 属性值不带分号
+          type: 'value',
+          boost: specificValues.includes(value) ? 10 : 0 // 特定属性值优先级更高
+        })),
+        validFor: /\w*/
       };
     }
   }
