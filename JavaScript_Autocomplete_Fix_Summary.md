@@ -13,10 +13,18 @@
 ### 具体问题
 - `jsCompletionExtension` 原本使用 `javascriptLanguage.data.of({...})` 方式，这在CodeMirror 6中不是正确的扩展配置方法
 - 在 `Editor.tsx` 中，JavaScript编辑器的创建方式可能导致多个autocompletion扩展冲突
+- **关键问题**：缺少JavaScript关键字补全，因为没有导入和使用 `snippets`
 
 ## 解决方案
 
-### 1. 修复 `autocompleteService.ts`
+### 1. 更新导入以包含snippets
+```typescript
+// 添加 snippets 和 completeFromList 导入
+import { localCompletionSource, snippets } from '@codemirror/lang-javascript';
+import { autocompletion, CompletionContext, CompletionSource, snippetCompletion, completeFromList } from '@codemirror/autocomplete';
+```
+
+### 2. 修复 `autocompleteService.ts`
 ```typescript
 // 修复前 (错误的实现)
 export const jsCompletionExtension = [
@@ -31,9 +39,11 @@ export const jsCompletionExtension = [
     override: [
       // 1. 使用CodeMirror原生的JavaScript补全源
       localCompletionSource,
-      // 2. 文档内容单词补全（替代anyword-hint）
+      // 2. JavaScript关键字和代码片段补全（包含const, let, var等关键字）
+      completeFromList(snippets),
+      // 3. 文档内容单词补全（替代anyword-hint）
       documentWordCompletionSource,
-      // 3. 精简的代码片段补全
+      // 4. 额外的代码片段补全
       minimalJsSnippetCompletionSource
     ],
     defaultKeymap: true,
@@ -42,7 +52,9 @@ export const jsCompletionExtension = [
 ];
 ```
 
-### 2. 修复 `Editor.tsx` 中的JavaScript编辑器创建
+**重要修复**：添加了 `completeFromList(snippets)` 来包含JavaScript关键字补全（如const, let, var, function等）。
+
+### 3. 修复 `Editor.tsx` 中的JavaScript编辑器创建
 ```typescript
 // 修复前 (可能产生冲突)
 const jsExtension = [
@@ -82,15 +94,19 @@ const newJsEditor = createEditor(jsElement, jsExtension, setJsEditor, setJsCode,
 
 1. **原生JavaScript API补全**
    - 内置对象和方法 (console, Math, Array等)
-   - JavaScript关键字和语法
    - 变量和函数名补全
 
-2. **文档内单词补全**
+2. **JavaScript关键字补全**
+   - 所有JavaScript关键字 (const, let, var, function, if, for, while等)
+   - ES6+语法关键字 (async, await, class, import, export等)
+   - 通过 `snippets` 提供的完整关键字库
+
+3. **文档内单词补全**
    - 自动识别当前文档中的变量名
    - 排除JavaScript保留字
    - 前缀匹配优先级更高
 
-3. **代码片段补全**
+4. **代码片段补全**
    - 函数定义 (function, arrow function, async function)
    - 控制结构 (if, for, try-catch)
    - 模块导入导出
@@ -124,4 +140,9 @@ const newJsEditor = createEditor(jsElement, jsExtension, setJsEditor, setJsCode,
 1. 启动开发服务器 `npm start`
 2. 在JavaScript编辑器中输入代码
 3. 按 `Ctrl+Space` 或开始输入来触发自动补全
-4. 验证是否显示JavaScript API、变量名和代码片段建议
+4. 验证以下补全功能：
+   - **关键字补全**：输入 `con` 应该显示 `const`
+   - **变量补全**：输入 `let` 应该显示 `let`
+   - **函数补全**：输入 `func` 应该显示 `function`
+   - **API补全**：输入 `console.` 应该显示方法列表
+   - **代码片段**：输入 `if` 应该显示 if 语句模板

@@ -1,8 +1,8 @@
 import { htmlCompletionSource } from '@codemirror/lang-html';
 import { cssCompletionSource } from '@codemirror/lang-css';
-import { localCompletionSource } from '@codemirror/lang-javascript';
+import { localCompletionSource, snippets } from '@codemirror/lang-javascript';
 import { bracketMatching } from '@codemirror/language';//括号匹配高亮
-import { autocompletion, CompletionContext, CompletionSource, snippetCompletion } from '@codemirror/autocomplete';
+import { autocompletion, CompletionContext, CompletionSource, snippetCompletion, completeFromList } from '@codemirror/autocomplete';
 import { keymap } from '@codemirror/view';
 
 // 常用 HTML5 标签（用于标签补全）
@@ -493,9 +493,11 @@ export const jsCompletionExtension = [
     override: [
       // 1. 使用CodeMirror原生的JavaScript补全源
       localCompletionSource,
-      // 2. 文档内容单词补全（替代anyword-hint）
+      // 2. JavaScript关键字和代码片段补全（包含const, let, var等关键字）
+      completeFromList(snippets),
+      // 3. 文档内容单词补全（替代anyword-hint）
       documentWordCompletionSource,
-      // 3. 精简的代码片段补全
+      // 4. 额外的代码片段补全
       minimalJsSnippetCompletionSource
     ],
     defaultKeymap: true,
@@ -507,6 +509,7 @@ export const jsCompletionExtension = [
 export const jsAutocomplete = autocompletion({
   override: [
     localCompletionSource,
+    completeFromList(snippets),
     documentWordCompletionSource,
     minimalJsSnippetCompletionSource
   ],
