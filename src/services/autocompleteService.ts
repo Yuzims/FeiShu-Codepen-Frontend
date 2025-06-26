@@ -1,6 +1,6 @@
 import { htmlCompletionSource } from '@codemirror/lang-html';
 import { cssCompletionSource } from '@codemirror/lang-css';
-import { javascriptLanguage } from '@codemirror/lang-javascript';
+import { javascriptLanguage, localCompletionSource } from '@codemirror/lang-javascript';
 import { bracketMatching } from '@codemirror/language';//括号匹配高亮
 import { autocompletion, CompletionContext, CompletionSource, snippetCompletion } from '@codemirror/autocomplete';
 import { keymap } from '@codemirror/view';
@@ -115,7 +115,6 @@ export const htmlAutocomplete = autocompletion({
   defaultKeymap: true,
   maxRenderedOptions: 50
 });
-
 
 // CSS 代码片段补全源（增强的CSS补全功能）
 export const cssSnippetCompletionSource: CompletionSource = (context: CompletionContext) => {
@@ -346,8 +345,79 @@ export const cssAutocomplete = autocompletion({
   maxRenderedOptions: 50
 });
 
-// JavaScript 代码片段补全源（增强版）
-export const jsSnippetCompletionSource: CompletionSource = (context: CompletionContext) => {
+// 文档内容单词补全源（替代anyword-hint功能）
+export const documentWordCompletionSource: CompletionSource = (context: CompletionContext) => {
+  const word = context.matchBefore(/\w+/);
+  if (!word || word.text.length < 2) return null;
+
+  const line = context.state.doc.lineAt(context.pos);
+  const beforeCursor = line.text.slice(0, context.pos - line.from);
+
+  // 检查是否在字符串中
+  const inString = /["'`][^"'`]*$/.test(beforeCursor);
+  // 检查是否在注释中
+  const inComment = /\/\/.*$/.test(beforeCursor) || /\/\*.*\*\/$/.test(beforeCursor);
+
+  if (inComment || inString) {
+    return null; // 在注释或字符串中不提供补全
+  }
+
+  // 扫描整个文档获取单词
+  const doc = context.state.doc;
+  const words = new Set<string>();
+  const text = doc.toString();
+  
+  // 匹配JavaScript标识符模式
+  const identifierRegex = /\b[a-zA-Z_$][a-zA-Z0-9_$]{2,}\b/g;
+  let match;
+  
+  while ((match = identifierRegex.exec(text)) !== null) {
+    const foundWord = match[0];
+    // 排除当前正在输入的单词和JavaScript保留字
+    if (foundWord !== word.text && !isJavaScriptKeyword(foundWord)) {
+      words.add(foundWord);
+    }
+  }
+
+  if (words.size === 0) return null;
+
+  return {
+    from: word.from,
+    options: Array.from(words)
+      .filter(w => w.toLowerCase().includes(word.text.toLowerCase()))
+      .sort((a, b) => {
+        // 前缀匹配优先
+        const aStartsWith = a.toLowerCase().startsWith(word.text.toLowerCase());
+        const bStartsWith = b.toLowerCase().startsWith(word.text.toLowerCase());
+        if (aStartsWith && !bStartsWith) return -1;
+        if (!aStartsWith && bStartsWith) return 1;
+        return a.localeCompare(b);
+      })
+      .slice(0, 20) // 限制结果数量
+      .map(w => ({
+        label: w,
+        type: 'variable',
+        boost: w.toLowerCase().startsWith(word.text.toLowerCase()) ? 5 : 1
+      })),
+    validFor: /^[\w$]*$/
+  };
+};
+
+// JavaScript保留字检查
+const isJavaScriptKeyword = (word: string): boolean => {
+  const keywords = new Set([
+    'abstract', 'arguments', 'await', 'boolean', 'break', 'byte', 'case', 'catch', 'char', 'class', 'const',
+    'continue', 'debugger', 'default', 'delete', 'do', 'double', 'else', 'enum', 'eval', 'export', 'extends',
+    'false', 'final', 'finally', 'float', 'for', 'function', 'goto', 'if', 'implements', 'import', 'in',
+    'instanceof', 'int', 'interface', 'let', 'long', 'native', 'new', 'null', 'package', 'private', 'protected',
+    'public', 'return', 'short', 'static', 'super', 'switch', 'synchronized', 'this', 'throw', 'throws',
+    'transient', 'true', 'try', 'typeof', 'var', 'void', 'volatile', 'while', 'with', 'yield'
+  ]);
+  return keywords.has(word.toLowerCase());
+};
+
+// 精简的JavaScript代码片段补全源（只保留最有用的）
+export const minimalJsSnippetCompletionSource: CompletionSource = (context: CompletionContext) => {
   const word = context.matchBefore(/\w*/);
   if (!word || (word.from == word.to && !context.explicit)) return null;
 
@@ -356,7 +426,6 @@ export const jsSnippetCompletionSource: CompletionSource = (context: CompletionC
 
   // 检查是否在字符串中
   const inString = /["'`][^"'`]*$/.test(beforeCursor);
-
   // 检查是否在注释中
   const inComment = /\/\/.*$/.test(beforeCursor) || /\/\*.*\*\/$/.test(beforeCursor);
 
@@ -364,156 +433,48 @@ export const jsSnippetCompletionSource: CompletionSource = (context: CompletionC
     return null; // 在注释或字符串中不提供补全
   }
 
-  // 现代JavaScript代码片段
-  const modernJsSnippets = [
-    // ES6+ 语法
-    snippetCompletion('const ${1:name} = ${2:value};', { label: 'const', type: 'keyword' }),
-    snippetCompletion('let ${1:name} = ${2:value};', { label: 'let', type: 'keyword' }),
-    snippetCompletion('const [${1:first}, ${2:second}] = ${3:array};', { label: 'destructuring array', type: 'snippet' }),
-    snippetCompletion('const {${1:prop}} = ${2:object};', { label: 'destructuring object', type: 'snippet' }),
-    snippetCompletion('const {${1:prop}: ${2:alias}} = ${3:object};', { label: 'destructuring with alias', type: 'snippet' }),
-    
-    // Arrow Functions
-    snippetCompletion('(${1:params}) => ${2:expression}', { label: 'arrow function', type: 'snippet' }),
-    snippetCompletion('(${1:params}) => {\n\t${2}\n}', { label: 'arrow function block', type: 'snippet' }),
+  // 只保留最有用的JavaScript代码片段
+  const essentialSnippets = [
+    // 函数相关
+    snippetCompletion('function ${1:name}(${2:params}) {\n\t${3}\n}', { label: 'function', type: 'snippet' }),
+    snippetCompletion('(${1:params}) => {\n\t${2}\n}', { label: 'arrow function', type: 'snippet' }),
+    snippetCompletion('async function ${1:name}(${2:params}) {\n\t${3}\n}', { label: 'async function', type: 'snippet' }),
     snippetCompletion('async (${1:params}) => {\n\t${2}\n}', { label: 'async arrow', type: 'snippet' }),
     
-    // Promise & Async/Await
-    snippetCompletion('new Promise((resolve, reject) => {\n\t${1}\n});', { label: 'new Promise', type: 'snippet' }),
-    snippetCompletion('Promise.all([${1}]);', { label: 'Promise.all', type: 'method' }),
-    snippetCompletion('Promise.race([${1}]);', { label: 'Promise.race', type: 'method' }),
-    snippetCompletion('Promise.allSettled([${1}]);', { label: 'Promise.allSettled', type: 'method' }),
-    snippetCompletion('async function ${1:name}(${2:params}) {\n\ttry {\n\t\t${3}\n\t} catch (error) {\n\t\t${4}\n\t}\n}', { label: 'async function with try/catch', type: 'snippet' }),
-    snippetCompletion('await ${1:promise};', { label: 'await', type: 'keyword' }),
+    // 控制结构
+    snippetCompletion('if (${1:condition}) {\n\t${2}\n}', { label: 'if', type: 'snippet' }),
+    snippetCompletion('if (${1:condition}) {\n\t${2}\n} else {\n\t${3}\n}', { label: 'if else', type: 'snippet' }),
+    snippetCompletion('for (let ${1:i} = 0; ${1:i} < ${2:array}.length; ${1:i}++) {\n\t${3}\n}', { label: 'for loop', type: 'snippet' }),
+    snippetCompletion('for (const ${1:item} of ${2:array}) {\n\t${3}\n}', { label: 'for of', type: 'snippet' }),
+    snippetCompletion('for (const ${1:key} in ${2:object}) {\n\t${3}\n}', { label: 'for in', type: 'snippet' }),
     
-    // Array Methods (ES5+)
-    snippetCompletion('${1:array}.map(${2:item} => ${3:item});', { label: 'array.map', type: 'method' }),
-    snippetCompletion('${1:array}.filter(${2:item} => ${3:condition});', { label: 'array.filter', type: 'method' }),
-    snippetCompletion('${1:array}.reduce((${2:acc}, ${3:item}) => ${4:acc}, ${5:initial});', { label: 'array.reduce', type: 'method' }),
-    snippetCompletion('${1:array}.find(${2:item} => ${3:condition});', { label: 'array.find', type: 'method' }),
-    snippetCompletion('${1:array}.findIndex(${2:item} => ${3:condition});', { label: 'array.findIndex', type: 'method' }),
-    snippetCompletion('${1:array}.some(${2:item} => ${3:condition});', { label: 'array.some', type: 'method' }),
-    snippetCompletion('${1:array}.every(${2:item} => ${3:condition});', { label: 'array.every', type: 'method' }),
-    snippetCompletion('${1:array}.forEach(${2:item} => {\n\t${3}\n});', { label: 'array.forEach', type: 'method' }),
-    snippetCompletion('${1:array}.includes(${2:item});', { label: 'array.includes', type: 'method' }),
-    snippetCompletion('${1:array}.flat(${2:depth});', { label: 'array.flat', type: 'method' }),
-    snippetCompletion('${1:array}.flatMap(${2:item} => ${3:item});', { label: 'array.flatMap', type: 'method' }),
+    // 错误处理
+    snippetCompletion('try {\n\t${1}\n} catch (${2:error}) {\n\t${3}\n}', { label: 'try catch', type: 'snippet' }),
     
-    // Object Methods
-    snippetCompletion('Object.keys(${1:object});', { label: 'Object.keys', type: 'method' }),
-    snippetCompletion('Object.values(${1:object});', { label: 'Object.values', type: 'method' }),
-    snippetCompletion('Object.entries(${1:object});', { label: 'Object.entries', type: 'method' }),
-    snippetCompletion('Object.assign({}, ${1:source});', { label: 'Object.assign', type: 'method' }),
-    snippetCompletion('Object.freeze(${1:object});', { label: 'Object.freeze', type: 'method' }),
-    snippetCompletion('Object.seal(${1:object});', { label: 'Object.seal', type: 'method' }),
-    snippetCompletion('Object.hasOwnProperty.call(${1:object}, "${2:property}");', { label: 'hasOwnProperty', type: 'method' }),
+    // 类和模块
+    snippetCompletion('class ${1:ClassName} {\n\tconstructor(${2:params}) {\n\t\t${3}\n\t}\n}', { label: 'class', type: 'snippet' }),
+    snippetCompletion('import { ${1:name} } from \'${2:module}\';', { label: 'import', type: 'snippet' }),
+    snippetCompletion('export { ${1:name} };', { label: 'export', type: 'snippet' }),
     
-    // Modern DOM API
-    snippetCompletion('document.querySelector("${1:selector}");', { label: 'querySelector', type: 'method' }),
-    snippetCompletion('document.querySelectorAll("${1:selector}");', { label: 'querySelectorAll', type: 'method' }),
-    snippetCompletion('document.getElementById("${1:id}");', { label: 'getElementById', type: 'method' }),
-    snippetCompletion('document.createElement("${1:tagName}");', { label: 'createElement', type: 'method' }),
-    snippetCompletion('${1:element}.addEventListener("${2:event}", ${3:handler});', { label: 'addEventListener', type: 'method' }),
-    snippetCompletion('${1:element}.removeEventListener("${2:event}", ${3:handler});', { label: 'removeEventListener', type: 'method' }),
-    snippetCompletion('${1:element}.classList.add("${2:className}");', { label: 'classList.add', type: 'method' }),
-    snippetCompletion('${1:element}.classList.remove("${2:className}");', { label: 'classList.remove', type: 'method' }),
-    snippetCompletion('${1:element}.classList.toggle("${2:className}");', { label: 'classList.toggle', type: 'method' }),
-    snippetCompletion('${1:element}.classList.contains("${2:className}");', { label: 'classList.contains', type: 'method' }),
+    // Promise和异步
+    snippetCompletion('new Promise((resolve, reject) => {\n\t${1}\n});', { label: 'Promise', type: 'snippet' }),
+    snippetCompletion('await ${1:promise};', { label: 'await', type: 'snippet' }),
     
-    // Fetch API
-    snippetCompletion('fetch("${1:url}")\n\t.then(response => response.json())\n\t.then(data => {\n\t\t${2}\n\t})\n\t.catch(error => {\n\t\t${3}\n\t});', { label: 'fetch basic', type: 'snippet' }),
-    snippetCompletion('const response = await fetch("${1:url}");\nconst data = await response.json();\n${2}', { label: 'fetch async/await', type: 'snippet' }),
-    snippetCompletion('fetch("${1:url}", {\n\tmethod: "${2:POST}",\n\theaders: {\n\t\t"Content-Type": "application/json"\n\t},\n\tbody: JSON.stringify(${3:data})\n});', { label: 'fetch POST', type: 'snippet' }),
-    
-    // Error Handling
-    snippetCompletion('try {\n\t${1}\n} catch (error) {\n\tconsole.error("${2:Error message}:", error);\n\t${3}\n}', { label: 'try/catch with logging', type: 'snippet' }),
-    snippetCompletion('try {\n\t${1}\n} catch (error) {\n\t${2}\n} finally {\n\t${3}\n}', { label: 'try/catch/finally', type: 'snippet' }),
-    
-    // Modules
-    snippetCompletion('import ${1:module} from "${2:path}";', { label: 'import default', type: 'snippet' }),
-    snippetCompletion('import { ${1:named} } from "${2:path}";', { label: 'import named', type: 'snippet' }),
-    snippetCompletion('import * as ${1:alias} from "${2:path}";', { label: 'import namespace', type: 'snippet' }),
-    snippetCompletion('export default ${1:value};', { label: 'export default', type: 'snippet' }),
-    snippetCompletion('export { ${1:name} };', { label: 'export named', type: 'snippet' }),
-    snippetCompletion('export const ${1:name} = ${2:value};', { label: 'export const', type: 'snippet' }),
-    
-    // Classes (ES6+)
-    snippetCompletion('class ${1:ClassName} {\n\tconstructor(${2:params}) {\n\t\t${3}\n\t}\n\n\t${4:methodName}() {\n\t\t${5}\n\t}\n}', { label: 'class', type: 'snippet' }),
-    snippetCompletion('class ${1:ClassName} extends ${2:ParentClass} {\n\tconstructor(${3:params}) {\n\t\tsuper(${4});\n\t\t${5}\n\t}\n}', { label: 'class extends', type: 'snippet' }),
-    snippetCompletion('static ${1:methodName}(${2:params}) {\n\t${3}\n}', { label: 'static method', type: 'snippet' }),
-    
-    // Template Literals
-    snippetCompletion('`${1:string} \\${${2:expression}}`', { label: 'template literal', type: 'snippet' }),
-    
-    // JSON
-    snippetCompletion('JSON.stringify(${1:object}, null, 2);', { label: 'JSON.stringify formatted', type: 'method' }),
-    snippetCompletion('JSON.parse(${1:jsonString});', { label: 'JSON.parse', type: 'method' }),
-    
-    // Regular Expressions
-    snippetCompletion('/${1:pattern}/${2:flags}', { label: 'regex literal', type: 'snippet' }),
-    snippetCompletion('new RegExp("${1:pattern}", "${2:flags}");', { label: 'RegExp constructor', type: 'snippet' }),
-    snippetCompletion('${1:string}.match(/${2:pattern}/${3:flags});', { label: 'string.match', type: 'method' }),
-    snippetCompletion('${1:string}.replace(/${2:pattern}/${3:flags}, "${4:replacement}");', { label: 'string.replace', type: 'method' }),
-    
-    // Console methods
-    snippetCompletion('console.log(${1});', { label: 'console.log', type: 'method' }),
-    snippetCompletion('console.error(${1});', { label: 'console.error', type: 'method' }),
-    snippetCompletion('console.warn(${1});', { label: 'console.warn', type: 'method' }),
-    snippetCompletion('console.info(${1});', { label: 'console.info', type: 'method' }),
-    snippetCompletion('console.table(${1});', { label: 'console.table', type: 'method' }),
-    snippetCompletion('console.group("${1:label}");', { label: 'console.group', type: 'method' }),
-    snippetCompletion('console.time("${1:label}");', { label: 'console.time', type: 'method' }),
-    snippetCompletion('console.timeEnd("${1:label}");', { label: 'console.timeEnd', type: 'method' }),
-    
-    // Storage API
-    snippetCompletion('localStorage.setItem("${1:key}", ${2:value});', { label: 'localStorage.setItem', type: 'method' }),
-    snippetCompletion('localStorage.getItem("${1:key}");', { label: 'localStorage.getItem', type: 'method' }),
-    snippetCompletion('localStorage.removeItem("${1:key}");', { label: 'localStorage.removeItem', type: 'method' }),
-    snippetCompletion('sessionStorage.setItem("${1:key}", ${2:value});', { label: 'sessionStorage.setItem', type: 'method' }),
-    
-    // Date
-    snippetCompletion('new Date();', { label: 'new Date', type: 'snippet' }),
-    snippetCompletion('Date.now();', { label: 'Date.now', type: 'method' }),
-    snippetCompletion('new Date().toISOString();', { label: 'date to ISO string', type: 'snippet' }),
-    
-    // Math
-    snippetCompletion('Math.max(${1:values});', { label: 'Math.max', type: 'method' }),
-    snippetCompletion('Math.min(${1:values});', { label: 'Math.min', type: 'method' }),
-    snippetCompletion('Math.random();', { label: 'Math.random', type: 'method' }),
-    snippetCompletion('Math.floor(${1:number});', { label: 'Math.floor', type: 'method' }),
-    snippetCompletion('Math.ceil(${1:number});', { label: 'Math.ceil', type: 'method' }),
-    snippetCompletion('Math.round(${1:number});', { label: 'Math.round', type: 'method' }),
-    
-    // Set and Map
-    snippetCompletion('new Set([${1:values}]);', { label: 'new Set', type: 'snippet' }),
-    snippetCompletion('new Map([${1:entries}]);', { label: 'new Map', type: 'snippet' }),
-    snippetCompletion('${1:set}.has(${2:value});', { label: 'set.has', type: 'method' }),
-    snippetCompletion('${1:map}.set(${2:key}, ${3:value});', { label: 'map.set', type: 'method' }),
-    snippetCompletion('${1:map}.get(${2:key});', { label: 'map.get', type: 'method' }),
-    
-    // Debugging
-    snippetCompletion('debugger;', { label: 'debugger', type: 'keyword' })
+    // 常用对象方法
+    snippetCompletion('console.log(${1});', { label: 'console.log', type: 'snippet' }),
+    snippetCompletion('JSON.stringify(${1});', { label: 'JSON.stringify', type: 'snippet' }),
+    snippetCompletion('JSON.parse(${1});', { label: 'JSON.parse', type: 'snippet' })
   ];
 
   // 根据输入进行智能过滤
-  const filteredSnippets = modernJsSnippets.filter(snippet => {
+  const filteredSnippets = essentialSnippets.filter(snippet => {
     const label = snippet.label?.toLowerCase() || '';
     const searchText = word.text.toLowerCase();
     
-    // 优先级：前缀匹配 > 包含匹配 > 模糊匹配
-    if (label.startsWith(searchText)) {
-      snippet.boost = 10;
+    // 前缀匹配或包含匹配
+    if (label.startsWith(searchText) || label.includes(searchText)) {
+      snippet.boost = label.startsWith(searchText) ? 10 : 5;
       return true;
-    } else if (label.includes(searchText)) {
-      snippet.boost = 5;
-      return true;
-    } else if (searchText.length > 2) {
-      // 模糊匹配（至少输入3个字符）
-      const fuzzyMatch = searchText.split('').every((char: string) => label.includes(char));
-      if (fuzzyMatch) {
-        snippet.boost = 1;
-        return true;
-      }
     }
     return false;
   });
@@ -525,17 +486,32 @@ export const jsSnippetCompletionSource: CompletionSource = (context: CompletionC
   };
 };
 
-// JavaScript 自动补全（使用CodeMirror原生 + 自定义代码片段）
-export const jsAutocomplete = autocompletion({
-  override: [jsSnippetCompletionSource],
+// 增强的JavaScript自动补全（正确集成CodeMirror 6原生JavaScript补全）
+// 注意：不能使用override替换原生补全，而是要添加到JavaScript语言的补全系统中
+export const enhancedJsAutocomplete = autocompletion({
+  // 这里只添加我们的额外补全源，不替换CodeMirror原生的JavaScript补全
+  override: [
+    // 1. 文档内容单词补全（替代anyword-hint）
+    documentWordCompletionSource,
+    // 2. 精简的代码片段补全
+    minimalJsSnippetCompletionSource
+  ],
   defaultKeymap: true,
-  maxRenderedOptions: 100
+  maxRenderedOptions: 30 // 减少显示数量，提高性能
 });
 
-// 获取JavaScript语言的补全源，包含原生JavaScript补全和自定义代码片段
-export const jsCompletionSource = javascriptLanguage.data.of({
-  autocomplete: jsAutocomplete
-});
+// 向后兼容的jsAutocomplete导出（使用新的增强版本）
+export const jsAutocomplete = enhancedJsAutocomplete;
+
+// **重要：正确的JavaScript补全扩展，包含CodeMirror 6原生JavaScript补全**
+// 使用javascript()扩展本身，它已经包含了所有JavaScript内置补全功能
+// 然后通过languageData添加我们的额外补全源
+export const jsCompletionExtension = [
+  // JavaScript语言的补全源，注册额外的补全功能到JavaScript语言系统中
+  javascriptLanguage.data.of({
+    autocomplete: [documentWordCompletionSource, minimalJsSnippetCompletionSource]
+  })
+];
 
 // 导出括号高亮匹配扩展
 export const bracketMatchingExtension = bracketMatching();
@@ -570,6 +546,28 @@ export const closeBracketsExtension = keymap.of([
       const { from, to } = view.state.selection.main;
       view.dispatch({
         changes: [{ from, insert: "{}" }],
+        selection: { anchor: from + 1, head: from + 1 }
+      });
+      return true;
+    }
+  },
+  {
+    key: "\"",
+    run: (view) => {
+      const { from, to } = view.state.selection.main;
+      view.dispatch({
+        changes: [{ from, insert: "\"\"" }],
+        selection: { anchor: from + 1, head: from + 1 }
+      });
+      return true;
+    }
+  },
+  {
+    key: "'",
+    run: (view) => {
+      const { from, to } = view.state.selection.main;
+      view.dispatch({
+        changes: [{ from, insert: "''" }],
         selection: { anchor: from + 1, head: from + 1 }
       });
       return true;
