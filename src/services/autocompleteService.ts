@@ -144,146 +144,132 @@ export const cssSnippetCompletionSource: CompletionSource = (context: Completion
 
   // 如果在属性值中，优先提供单位补全
   if (inPropertyValue) {
-    // 匹配数字（包括多个数字，如 100, 200, 300）
-    // 使用更精确的匹配，确保匹配到光标位置的数字
+    // 改进的数字匹配逻辑，避免重复触发
     const numberMatch = beforeCursor.match(/(\d+(?:\.\d+)?)\s*$/);
     if (numberMatch) {
       const number = numberMatch[1];
+      // 检查光标后是否已经有单位，避免重复补全
+      const afterCursor = line.text.slice(context.pos - line.from);
+      const hasUnitAfter = /^[a-zA-Z%]+/.test(afterCursor);
+      
+      if (hasUnitAfter) {
+        return null; // 已经有单位了，不需要补全
+      }
+
       const units = [
-        { label: 'px', insert: 'px' },
-        { label: 'rem', insert: 'rem' },
-        { label: 'em', insert: 'em' },
-        { label: '%', insert: '%' },
-        { label: 'vw', insert: 'vw' },
-        { label: 'vh', insert: 'vh' },
-        { label: 'pt', insert: 'pt' },
-        { label: 'pc', insert: 'pc' },
-        { label: 'in', insert: 'in' },
-        { label: 'cm', insert: 'cm' },
-        { label: 'mm', insert: 'mm' },
-        { label: 'deg', insert: 'deg' },
-        { label: 'rad', insert: 'rad' },
-        { label: 'turn', insert: 'turn' },
-        { label: 's', insert: 's' },
-        { label: 'ms', insert: 'ms' },
-        { label: 'Hz', insert: 'Hz' },
-        { label: 'kHz', insert: 'kHz' }
+        { label: `${number}px`, insert: 'px', type: 'unit' },
+        { label: `${number}rem`, insert: 'rem', type: 'unit' },
+        { label: `${number}em`, insert: 'em', type: 'unit' },
+        { label: `${number}%`, insert: '%', type: 'unit' },
+        { label: `${number}vw`, insert: 'vw', type: 'unit' },
+        { label: `${number}vh`, insert: 'vh', type: 'unit' },
+        { label: `${number}pt`, insert: 'pt', type: 'unit' },
+        { label: `${number}deg`, insert: 'deg', type: 'unit' },
+        { label: `${number}s`, insert: 's', type: 'unit' },
+        { label: `${number}ms`, insert: 'ms', type: 'unit' }
       ];
 
       return {
         from: context.pos,
         options: units.map(unit => ({
-          label: unit.label, // 只显示单位名称
+          label: unit.label,
           apply: unit.insert,
-          type: 'unit'
+          type: unit.type,
+          boost: 99 // 提高优先级
         })),
-        validFor: /\w*/
+        validFor: /^$/ // 只在没有后续字符时有效
       };
     }
   }
 
-  // 常用CSS属性代码片段
-  //补全时加上；
-  const cssSnippets = [
-    // Font相关 - 特殊处理font关键词
-    ...(word.text === 'font' ? [
-      snippetCompletion('font-size: ${1};', { label: 'font-size' }),
-      snippetCompletion('font-weight: ${1};', { label: 'font-weight' }),
-      snippetCompletion('font-family: ${1};', { label: 'font-family' }),
-      snippetCompletion('font-style: ${1};', { label: 'font-style' }),
-      snippetCompletion('font-variant: ${1};', { label: 'font-variant' }),
-      snippetCompletion('font-stretch: ${1};', { label: 'font-stretch' }),
-      snippetCompletion('font-size-adjust: ${1};', { label: 'font-size-adjust' }),
-      snippetCompletion('font: ${1};', { label: 'font shorthand' })
-    ] : [
-      snippetCompletion('font-size: ${1};', { label: 'font-size' }),
-      snippetCompletion('font-weight: ${1};', { label: 'font-weight' }),
-      snippetCompletion('font-family: ${1};', { label: 'font-family' }),
-      snippetCompletion('font-style: ${1};', { label: 'font-style' }),
-      snippetCompletion('font-variant: ${1};', { label: 'font-variant' }),
-      snippetCompletion('font-stretch: ${1};', { label: 'font-stretch' }),
-      snippetCompletion('font-size-adjust: ${1};', { label: 'font-size-adjust' }),
-      snippetCompletion('font: ${1};', { label: 'font shorthand' })
-    ]),
-    snippetCompletion('line-height: ${1};', { label: 'line-height' }),
-    snippetCompletion('text-align: ${1};', { label: 'text-align' }),
-    snippetCompletion('text-decoration: ${1};', { label: 'text-decoration' }),
-    snippetCompletion('text-transform: ${1};', { label: 'text-transform' }),
-
+  // 改进的CSS属性补全，确保所有属性都有分号
+  const cssProperties = [
+    // Font相关
+    'font-size', 'font-weight', 'font-family', 'font-style', 'font-variant',
+    'font-stretch', 'font-size-adjust', 'line-height', 'text-align', 
+    'text-decoration', 'text-transform', 'letter-spacing', 'word-spacing',
+    
     // Layout相关
-    snippetCompletion('display: ${1};', { label: 'display' }),
-    snippetCompletion('position: ${1};', { label: 'position' }),
-    snippetCompletion('top: ${1};', { label: 'top' }),
-    snippetCompletion('right: ${1};', { label: 'right' }),
-    snippetCompletion('bottom: ${1};', { label: 'bottom' }),
-    snippetCompletion('left: ${1};', { label: 'left' }),
-    snippetCompletion('width: ${1};', { label: 'width' }),
-    snippetCompletion('height: ${1};', { label: 'height' }),
-    snippetCompletion('max-width: ${1};', { label: 'max-width' }),
-    snippetCompletion('max-height: ${1};', { label: 'max-height' }),
-    snippetCompletion('min-width: ${1};', { label: 'min-width' }),
-    snippetCompletion('min-height: ${1};', { label: 'min-height' }),
-
+    'display', 'position', 'top', 'right', 'bottom', 'left',
+    'width', 'height', 'max-width', 'max-height', 'min-width', 'min-height',
+    'box-sizing', 'overflow', 'overflow-x', 'overflow-y', 'z-index',
+    
     // Margin和Padding
-    snippetCompletion('margin: ${1};', { label: 'margin' }),
-    snippetCompletion('margin-top: ${1};', { label: 'margin-top' }),
-    snippetCompletion('margin-right: ${1};', { label: 'margin-right' }),
-    snippetCompletion('margin-bottom: ${1};', { label: 'margin-bottom' }),
-    snippetCompletion('margin-left: ${1};', { label: 'margin-left' }),
-    snippetCompletion('padding: ${1};', { label: 'padding' }),
-    snippetCompletion('padding-top: ${1};', { label: 'padding-top' }),
-    snippetCompletion('padding-right: ${1};', { label: 'padding-right' }),
-    snippetCompletion('padding-bottom: ${1};', { label: 'padding-bottom' }),
-    snippetCompletion('padding-left: ${1};', { label: 'padding-left' }),
-
+    'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
+    'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+    
     // Border相关
-    snippetCompletion('border: ${1};', { label: 'border' }),
-    snippetCompletion('border-width: ${1};', { label: 'border-width' }),
-    snippetCompletion('border-style: ${1};', { label: 'border-style' }),
-    snippetCompletion('border-color: ${1};', { label: 'border-color' }),
-    snippetCompletion('border-radius: ${1};', { label: 'border-radius' }),
-
+    'border', 'border-width', 'border-style', 'border-color', 'border-radius',
+    'border-top', 'border-right', 'border-bottom', 'border-left',
+    
     // Background相关
-    snippetCompletion('background: ${1};', { label: 'background' }),
-    snippetCompletion('background-color: ${1};', { label: 'background-color' }),
-    snippetCompletion('background-image: ${1};', { label: 'background-image' }),
-    snippetCompletion('background-size: ${1};', { label: 'background-size' }),
-    snippetCompletion('background-position: ${1};', { label: 'background-position' }),
-    snippetCompletion('background-repeat: ${1};', { label: 'background-repeat' }),
-
+    'background', 'background-color', 'background-image', 'background-size',
+    'background-position', 'background-repeat', 'background-attachment',
+    
     // Flexbox
-    snippetCompletion('flex: ${1};', { label: 'flex' }),
-    snippetCompletion('flex-direction: ${1};', { label: 'flex-direction' }),
-    snippetCompletion('flex-wrap: ${1};', { label: 'flex-wrap' }),
-    snippetCompletion('justify-content: ${1};', { label: 'justify-content' }),
-    snippetCompletion('align-items: ${1};', { label: 'align-items' }),
-    snippetCompletion('align-self: ${1};', { label: 'align-self' }),
-
+    'flex', 'flex-direction', 'flex-wrap', 'flex-flow', 'justify-content',
+    'align-items', 'align-content', 'align-self', 'flex-grow', 'flex-shrink',
+    
     // Grid
-    snippetCompletion('grid-template-columns: ${1};', { label: 'grid-template-columns' }),
-    snippetCompletion('grid-template-rows: ${1};', { label: 'grid-template-rows' }),
-    snippetCompletion('grid-gap: ${1};', { label: 'grid-gap' }),
-    snippetCompletion('grid-column: ${1};', { label: 'grid-column' }),
-    snippetCompletion('grid-row: ${1};', { label: 'grid-row' }),
-
+    'grid', 'grid-template', 'grid-template-columns', 'grid-template-rows',
+    'grid-gap', 'grid-column', 'grid-row', 'grid-area',
+    
     // Transform和Animation
-    snippetCompletion('transform: ${1};', { label: 'transform' }),
-    snippetCompletion('transition: ${1};', { label: 'transition' }),
-    snippetCompletion('animation: ${1};', { label: 'animation' }),
-    snippetCompletion('opacity: ${1};', { label: 'opacity' }),
-    snippetCompletion('visibility: ${1};', { label: 'visibility' }),
-
-    // 常用简写属性
-    snippetCompletion('margin: ${1} ${2} ${3} ${4};', { label: 'margin shorthand' }),
-    snippetCompletion('padding: ${1} ${2} ${3} ${4};', { label: 'padding shorthand' }),
-    snippetCompletion('border: ${1} ${2} ${3};', { label: 'border shorthand' }),
-    snippetCompletion('background: ${1} ${2} ${3} ${4};', { label: 'background shorthand' })
+    'transform', 'transform-origin', 'transition', 'transition-property',
+    'transition-duration', 'transition-timing-function', 'transition-delay',
+    'animation', 'animation-name', 'animation-duration', 'animation-timing-function',
+    'opacity', 'visibility', 'cursor'
   ];
+
+  // 根据输入的字符进行过滤和补全
+  const filteredProperties = cssProperties.filter(prop => 
+    prop.toLowerCase().includes(word.text.toLowerCase())
+  );
+
+  const cssSnippets = filteredProperties.map(prop => 
+    snippetCompletion(`${prop}: \${1};`, { 
+      label: prop,
+      type: 'property',
+      boost: prop.startsWith(word.text) ? 10 : 0 // 前缀匹配优先级更高
+    })
+  );
+
+  // 常用CSS值补全
+  const cssValues = [];
+  
+  // 根据属性上下文提供特定值
+  const propertyContext = beforeCursor.match(/(\w+(?:-\w+)*)\s*:\s*[^;]*$/);
+  if (propertyContext) {
+    const property: string = propertyContext[1];
+    
+    // 为特定属性提供常用值
+    const propertyValues: Record<string, string[]> = {
+      'display': ['block', 'inline', 'inline-block', 'flex', 'grid', 'none'],
+      'position': ['static', 'relative', 'absolute', 'fixed', 'sticky'],
+      'text-align': ['left', 'center', 'right', 'justify'],
+      'font-weight': ['normal', 'bold', '100', '200', '300', '400', '500', '600', '700', '800', '900'],
+      'cursor': ['pointer', 'default', 'text', 'wait', 'help', 'not-allowed'],
+      'overflow': ['visible', 'hidden', 'scroll', 'auto'],
+      'flex-direction': ['row', 'column', 'row-reverse', 'column-reverse'],
+      'justify-content': ['flex-start', 'flex-end', 'center', 'space-between', 'space-around', 'space-evenly'],
+      'align-items': ['stretch', 'flex-start', 'flex-end', 'center', 'baseline']
+    };
+
+    if (propertyValues[property]) {
+      cssValues.push(...propertyValues[property].map((value: string) => 
+        snippetCompletion(`${value};`, { 
+          label: value, 
+          type: 'value',
+          boost: 5
+        })
+      ));
+    }
+  }
 
   return {
     from: word.from,
-    options: cssSnippets,
-    validFor: /\w*/
+    options: [...cssSnippets, ...cssValues],
+    validFor: /^[\w-]*$/
   };
 };
 
@@ -294,7 +280,7 @@ export const cssAutocomplete = autocompletion({
   maxRenderedOptions: 50
 });
 
-// JavaScript 代码片段补全源（CodeMirror原生没有的代码片段）
+// JavaScript 代码片段补全源（增强版）
 export const jsSnippetCompletionSource: CompletionSource = (context: CompletionContext) => {
   const word = context.matchBefore(/\w*/);
   if (!word || (word.from == word.to && !context.explicit)) return null;
@@ -312,77 +298,164 @@ export const jsSnippetCompletionSource: CompletionSource = (context: CompletionC
     return null; // 在注释或字符串中不提供补全
   }
 
-  // 常用代码片段（CodeMirror原生没有的代码片段）
-  const codeSnippets = [
-    snippetCompletion('new Promise((resolve, reject) => {\n\t${1}\n});', { label: 'new Promise' }),
-    snippetCompletion('Promise((resolve, reject) => {\n\t${1}\n});', { label: 'Promise' }),
-    snippetCompletion('function ${1:name}(${2:params}) {\n\t${3}\n}', { label: 'function' }),
-    snippetCompletion('(${1:params}) => {\n\t${2}\n}', { label: 'arrow function' }),
-    snippetCompletion('async function ${1:name}(${2:params}) {\n\t${3}\n}', { label: 'async function' }),
-    snippetCompletion('async (${1:params}) => {\n\t${2}\n}', { label: 'async arrow' }),
-    snippetCompletion('function* ${1:name}(${2:params}) {\n\t${3}\n}', { label: 'generator function' }),
-    // 条件语句
-    snippetCompletion('if (${1:condition}) {\n\t${2}\n}', { label: 'if' }),
-    snippetCompletion('if (${1:condition}) {\n\t${2}\n} else {\n\t${3}\n}', { label: 'if else' }),
-    snippetCompletion('else if (${1:condition}) {\n\t${2}\n}', { label: 'else if' }),
-    snippetCompletion('switch (${1:expression}) {\n\tcase ${2:value}:\n\t\t${3}\n\t\tbreak;\n\tdefault:\n\t\t${4}\n}', { label: 'switch' }),
-    // 循环语句
-    snippetCompletion('for (let ${1:i} = 0; ${1:i} < ${2:array}.length; ${1:i}++) {\n\t${3}\n}', { label: 'for' }),
-    snippetCompletion('for (const ${1:item} of ${2:array}) {\n\t${3}\n}', { label: 'for of' }),
-    snippetCompletion('for (const ${1:key} in ${2:object}) {\n\t${3}\n}', { label: 'for in' }),
-    snippetCompletion('while (${1:condition}) {\n\t${2}\n}', { label: 'while' }),
-    snippetCompletion('do {\n\t${1}\n} while (${2:condition});', { label: 'do while' }),
-    // 错误处理
-    snippetCompletion('try {\n\t${1}\n} catch (${2:error}) {\n\t${3}\n}', { label: 'try catch' }),
-    snippetCompletion('try {\n\t${1}\n} finally {\n\t${2}\n}', { label: 'try finally' }),
-    snippetCompletion('throw new Error(${1:message});', { label: 'throw error' }),
-    // 类和对象
-    snippetCompletion('class ${1:ClassName} {\n\tconstructor(${2:params}) {\n\t\t${3}\n\t}\n}', { label: 'class' }),
-    snippetCompletion('class ${1:ClassName} extends ${2:ParentClass} {\n\tconstructor(${3:params}) {\n\t\t${4}\n\t}\n}', { label: 'class extends' }),
-    snippetCompletion('get ${1:propertyName}() {\n\treturn ${2};\n}', { label: 'getter' }),
-    snippetCompletion('set ${1:propertyName}(${2:value}) {\n\t${3}\n}', { label: 'setter' }),
-    snippetCompletion('static ${1:methodName}(${2:params}) {\n\t${3}\n}', { label: 'static method' }),
-    // 模块
-    snippetCompletion('import ${1:module} from \'${2:path}\';', { label: 'import' }),
-    snippetCompletion('import { ${1:name} } from \'${2:path}\';', { label: 'import destructuring' }),
-    snippetCompletion('import * as ${1:alias} from \'${2:path}\';', { label: 'import as' }),
-    snippetCompletion('export default ${1};', { label: 'export default' }),
-    snippetCompletion('export { ${1} };', { label: 'export named' }),
-    // Promise
-    snippetCompletion('Promise.resolve(${1});', { label: 'Promise.resolve' }),
-    snippetCompletion('Promise.reject(${1});', { label: 'Promise.reject' }),
-    // 常用工具函数
-    snippetCompletion('JSON.stringify(${1:object});', { label: 'JSON.stringify' }),
-    snippetCompletion('JSON.parse(${1:jsonString});', { label: 'JSON.parse' }),
-    snippetCompletion('Object.keys(${1:object});', { label: 'Object.keys' }),
-    snippetCompletion('Object.values(${1:object});', { label: 'Object.values' }),
-    snippetCompletion('Object.entries(${1:object});', { label: 'Object.entries' }),
-    snippetCompletion('Array.from(${1:arrayLike});', { label: 'Array.from' }),
-    snippetCompletion('Array.isArray(${1:value});', { label: 'Array.isArray' }),
-    // DOM 操作
-    snippetCompletion('document.getElementById(\'${1:id}\');', { label: 'getElementById' }),
-    snippetCompletion('document.querySelector(\'${1:selector}\');', { label: 'querySelector' }),
-    snippetCompletion('document.querySelectorAll(\'${1:selector}\');', { label: 'querySelectorAll' }),
-    snippetCompletion('${1:element}.addEventListener(\'${2:event}\', (${3:e}) => {\n\t${4}\n});', { label: 'addEventListener' }),
-    // 定时器
-    snippetCompletion('setTimeout(() => {\n\t${1}\n}, ${2:1000});', { label: 'setTimeout' }),
-    snippetCompletion('setInterval(() => {\n\t${1}\n}, ${2:1000});', { label: 'setInterval' }),
-    snippetCompletion('requestAnimationFrame(() => {\n\t${1}\n});', { label: 'requestAnimationFrame' }),
-    // 常用变量声明
-    snippetCompletion('const ${1:obj} = {};', { label: 'const object' }),
-    snippetCompletion('const ${1:arr} = [];', { label: 'const array' }),
-    snippetCompletion('const ${1:map} = new Map();', { label: 'const map' }),
-    snippetCompletion('const ${1:set} = new Set();', { label: 'const set' }),
-    // 常用模式
-    snippetCompletion('console.log(${1});', { label: 'console.log' }),
-    snippetCompletion('console.error(${1});', { label: 'console.error' }),
-    snippetCompletion('debugger;', { label: 'debugger' })
+  // 现代JavaScript代码片段
+  const modernJsSnippets = [
+    // ES6+ 语法
+    snippetCompletion('const ${1:name} = ${2:value};', { label: 'const', type: 'keyword' }),
+    snippetCompletion('let ${1:name} = ${2:value};', { label: 'let', type: 'keyword' }),
+    snippetCompletion('const [${1:first}, ${2:second}] = ${3:array};', { label: 'destructuring array', type: 'snippet' }),
+    snippetCompletion('const {${1:prop}} = ${2:object};', { label: 'destructuring object', type: 'snippet' }),
+    snippetCompletion('const {${1:prop}: ${2:alias}} = ${3:object};', { label: 'destructuring with alias', type: 'snippet' }),
+    
+    // Arrow Functions
+    snippetCompletion('(${1:params}) => ${2:expression}', { label: 'arrow function', type: 'snippet' }),
+    snippetCompletion('(${1:params}) => {\n\t${2}\n}', { label: 'arrow function block', type: 'snippet' }),
+    snippetCompletion('async (${1:params}) => {\n\t${2}\n}', { label: 'async arrow', type: 'snippet' }),
+    
+    // Promise & Async/Await
+    snippetCompletion('new Promise((resolve, reject) => {\n\t${1}\n});', { label: 'new Promise', type: 'snippet' }),
+    snippetCompletion('Promise.all([${1}]);', { label: 'Promise.all', type: 'method' }),
+    snippetCompletion('Promise.race([${1}]);', { label: 'Promise.race', type: 'method' }),
+    snippetCompletion('Promise.allSettled([${1}]);', { label: 'Promise.allSettled', type: 'method' }),
+    snippetCompletion('async function ${1:name}(${2:params}) {\n\ttry {\n\t\t${3}\n\t} catch (error) {\n\t\t${4}\n\t}\n}', { label: 'async function with try/catch', type: 'snippet' }),
+    snippetCompletion('await ${1:promise};', { label: 'await', type: 'keyword' }),
+    
+    // Array Methods (ES5+)
+    snippetCompletion('${1:array}.map(${2:item} => ${3:item});', { label: 'array.map', type: 'method' }),
+    snippetCompletion('${1:array}.filter(${2:item} => ${3:condition});', { label: 'array.filter', type: 'method' }),
+    snippetCompletion('${1:array}.reduce((${2:acc}, ${3:item}) => ${4:acc}, ${5:initial});', { label: 'array.reduce', type: 'method' }),
+    snippetCompletion('${1:array}.find(${2:item} => ${3:condition});', { label: 'array.find', type: 'method' }),
+    snippetCompletion('${1:array}.findIndex(${2:item} => ${3:condition});', { label: 'array.findIndex', type: 'method' }),
+    snippetCompletion('${1:array}.some(${2:item} => ${3:condition});', { label: 'array.some', type: 'method' }),
+    snippetCompletion('${1:array}.every(${2:item} => ${3:condition});', { label: 'array.every', type: 'method' }),
+    snippetCompletion('${1:array}.forEach(${2:item} => {\n\t${3}\n});', { label: 'array.forEach', type: 'method' }),
+    snippetCompletion('${1:array}.includes(${2:item});', { label: 'array.includes', type: 'method' }),
+    snippetCompletion('${1:array}.flat(${2:depth});', { label: 'array.flat', type: 'method' }),
+    snippetCompletion('${1:array}.flatMap(${2:item} => ${3:item});', { label: 'array.flatMap', type: 'method' }),
+    
+    // Object Methods
+    snippetCompletion('Object.keys(${1:object});', { label: 'Object.keys', type: 'method' }),
+    snippetCompletion('Object.values(${1:object});', { label: 'Object.values', type: 'method' }),
+    snippetCompletion('Object.entries(${1:object});', { label: 'Object.entries', type: 'method' }),
+    snippetCompletion('Object.assign({}, ${1:source});', { label: 'Object.assign', type: 'method' }),
+    snippetCompletion('Object.freeze(${1:object});', { label: 'Object.freeze', type: 'method' }),
+    snippetCompletion('Object.seal(${1:object});', { label: 'Object.seal', type: 'method' }),
+    snippetCompletion('Object.hasOwnProperty.call(${1:object}, "${2:property}");', { label: 'hasOwnProperty', type: 'method' }),
+    
+    // Modern DOM API
+    snippetCompletion('document.querySelector("${1:selector}");', { label: 'querySelector', type: 'method' }),
+    snippetCompletion('document.querySelectorAll("${1:selector}");', { label: 'querySelectorAll', type: 'method' }),
+    snippetCompletion('document.getElementById("${1:id}");', { label: 'getElementById', type: 'method' }),
+    snippetCompletion('document.createElement("${1:tagName}");', { label: 'createElement', type: 'method' }),
+    snippetCompletion('${1:element}.addEventListener("${2:event}", ${3:handler});', { label: 'addEventListener', type: 'method' }),
+    snippetCompletion('${1:element}.removeEventListener("${2:event}", ${3:handler});', { label: 'removeEventListener', type: 'method' }),
+    snippetCompletion('${1:element}.classList.add("${2:className}");', { label: 'classList.add', type: 'method' }),
+    snippetCompletion('${1:element}.classList.remove("${2:className}");', { label: 'classList.remove', type: 'method' }),
+    snippetCompletion('${1:element}.classList.toggle("${2:className}");', { label: 'classList.toggle', type: 'method' }),
+    snippetCompletion('${1:element}.classList.contains("${2:className}");', { label: 'classList.contains', type: 'method' }),
+    
+    // Fetch API
+    snippetCompletion('fetch("${1:url}")\n\t.then(response => response.json())\n\t.then(data => {\n\t\t${2}\n\t})\n\t.catch(error => {\n\t\t${3}\n\t});', { label: 'fetch basic', type: 'snippet' }),
+    snippetCompletion('const response = await fetch("${1:url}");\nconst data = await response.json();\n${2}', { label: 'fetch async/await', type: 'snippet' }),
+    snippetCompletion('fetch("${1:url}", {\n\tmethod: "${2:POST}",\n\theaders: {\n\t\t"Content-Type": "application/json"\n\t},\n\tbody: JSON.stringify(${3:data})\n});', { label: 'fetch POST', type: 'snippet' }),
+    
+    // Error Handling
+    snippetCompletion('try {\n\t${1}\n} catch (error) {\n\tconsole.error("${2:Error message}:", error);\n\t${3}\n}', { label: 'try/catch with logging', type: 'snippet' }),
+    snippetCompletion('try {\n\t${1}\n} catch (error) {\n\t${2}\n} finally {\n\t${3}\n}', { label: 'try/catch/finally', type: 'snippet' }),
+    
+    // Modules
+    snippetCompletion('import ${1:module} from "${2:path}";', { label: 'import default', type: 'snippet' }),
+    snippetCompletion('import { ${1:named} } from "${2:path}";', { label: 'import named', type: 'snippet' }),
+    snippetCompletion('import * as ${1:alias} from "${2:path}";', { label: 'import namespace', type: 'snippet' }),
+    snippetCompletion('export default ${1:value};', { label: 'export default', type: 'snippet' }),
+    snippetCompletion('export { ${1:name} };', { label: 'export named', type: 'snippet' }),
+    snippetCompletion('export const ${1:name} = ${2:value};', { label: 'export const', type: 'snippet' }),
+    
+    // Classes (ES6+)
+    snippetCompletion('class ${1:ClassName} {\n\tconstructor(${2:params}) {\n\t\t${3}\n\t}\n\n\t${4:methodName}() {\n\t\t${5}\n\t}\n}', { label: 'class', type: 'snippet' }),
+    snippetCompletion('class ${1:ClassName} extends ${2:ParentClass} {\n\tconstructor(${3:params}) {\n\t\tsuper(${4});\n\t\t${5}\n\t}\n}', { label: 'class extends', type: 'snippet' }),
+    snippetCompletion('static ${1:methodName}(${2:params}) {\n\t${3}\n}', { label: 'static method', type: 'snippet' }),
+    
+    // Template Literals
+    snippetCompletion('`${1:string} \\${${2:expression}}`', { label: 'template literal', type: 'snippet' }),
+    
+    // JSON
+    snippetCompletion('JSON.stringify(${1:object}, null, 2);', { label: 'JSON.stringify formatted', type: 'method' }),
+    snippetCompletion('JSON.parse(${1:jsonString});', { label: 'JSON.parse', type: 'method' }),
+    
+    // Regular Expressions
+    snippetCompletion('/${1:pattern}/${2:flags}', { label: 'regex literal', type: 'snippet' }),
+    snippetCompletion('new RegExp("${1:pattern}", "${2:flags}");', { label: 'RegExp constructor', type: 'snippet' }),
+    snippetCompletion('${1:string}.match(/${2:pattern}/${3:flags});', { label: 'string.match', type: 'method' }),
+    snippetCompletion('${1:string}.replace(/${2:pattern}/${3:flags}, "${4:replacement}");', { label: 'string.replace', type: 'method' }),
+    
+    // Console methods
+    snippetCompletion('console.log(${1});', { label: 'console.log', type: 'method' }),
+    snippetCompletion('console.error(${1});', { label: 'console.error', type: 'method' }),
+    snippetCompletion('console.warn(${1});', { label: 'console.warn', type: 'method' }),
+    snippetCompletion('console.info(${1});', { label: 'console.info', type: 'method' }),
+    snippetCompletion('console.table(${1});', { label: 'console.table', type: 'method' }),
+    snippetCompletion('console.group("${1:label}");', { label: 'console.group', type: 'method' }),
+    snippetCompletion('console.time("${1:label}");', { label: 'console.time', type: 'method' }),
+    snippetCompletion('console.timeEnd("${1:label}");', { label: 'console.timeEnd', type: 'method' }),
+    
+    // Storage API
+    snippetCompletion('localStorage.setItem("${1:key}", ${2:value});', { label: 'localStorage.setItem', type: 'method' }),
+    snippetCompletion('localStorage.getItem("${1:key}");', { label: 'localStorage.getItem', type: 'method' }),
+    snippetCompletion('localStorage.removeItem("${1:key}");', { label: 'localStorage.removeItem', type: 'method' }),
+    snippetCompletion('sessionStorage.setItem("${1:key}", ${2:value});', { label: 'sessionStorage.setItem', type: 'method' }),
+    
+    // Date
+    snippetCompletion('new Date();', { label: 'new Date', type: 'snippet' }),
+    snippetCompletion('Date.now();', { label: 'Date.now', type: 'method' }),
+    snippetCompletion('new Date().toISOString();', { label: 'date to ISO string', type: 'snippet' }),
+    
+    // Math
+    snippetCompletion('Math.max(${1:values});', { label: 'Math.max', type: 'method' }),
+    snippetCompletion('Math.min(${1:values});', { label: 'Math.min', type: 'method' }),
+    snippetCompletion('Math.random();', { label: 'Math.random', type: 'method' }),
+    snippetCompletion('Math.floor(${1:number});', { label: 'Math.floor', type: 'method' }),
+    snippetCompletion('Math.ceil(${1:number});', { label: 'Math.ceil', type: 'method' }),
+    snippetCompletion('Math.round(${1:number});', { label: 'Math.round', type: 'method' }),
+    
+    // Set and Map
+    snippetCompletion('new Set([${1:values}]);', { label: 'new Set', type: 'snippet' }),
+    snippetCompletion('new Map([${1:entries}]);', { label: 'new Map', type: 'snippet' }),
+    snippetCompletion('${1:set}.has(${2:value});', { label: 'set.has', type: 'method' }),
+    snippetCompletion('${1:map}.set(${2:key}, ${3:value});', { label: 'map.set', type: 'method' }),
+    snippetCompletion('${1:map}.get(${2:key});', { label: 'map.get', type: 'method' }),
+    
+    // Debugging
+    snippetCompletion('debugger;', { label: 'debugger', type: 'keyword' })
   ];
+
+  // 根据输入进行智能过滤
+  const filteredSnippets = modernJsSnippets.filter(snippet => {
+    const label = snippet.label?.toLowerCase() || '';
+    const searchText = word.text.toLowerCase();
+    
+    // 优先级：前缀匹配 > 包含匹配 > 模糊匹配
+    if (label.startsWith(searchText)) {
+      snippet.boost = 10;
+      return true;
+    } else if (label.includes(searchText)) {
+      snippet.boost = 5;
+      return true;
+    } else if (searchText.length > 2) {
+      // 模糊匹配（至少输入3个字符）
+      const fuzzyMatch = searchText.split('').every((char: string) => label.includes(char));
+      if (fuzzyMatch) {
+        snippet.boost = 1;
+        return true;
+      }
+    }
+    return false;
+  });
 
   return {
     from: word.from,
-    options: codeSnippets,
-    validFor: /\w*/
+    options: filteredSnippets,
+    validFor: /^[\w$]*$/
   };
 };
 
