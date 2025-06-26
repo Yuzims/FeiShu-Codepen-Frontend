@@ -420,14 +420,14 @@ export const minimalJsSnippetCompletionSource: CompletionSource = (context: Comp
   };
 };
 
-// 增强的JavaScript自动补全（集成CodeMirror原生补全、本地补全、文档单词补全和精简片段）
+// 增强的JavaScript自动补全（正确集成CodeMirror 6原生JavaScript补全）
+// 注意：不能使用override替换原生补全，而是要添加到JavaScript语言的补全系统中
 export const enhancedJsAutocomplete = autocompletion({
+  // 这里只添加我们的额外补全源，不替换CodeMirror原生的JavaScript补全
   override: [
-    // 1. 本地变量和函数补全（CodeMirror 6原生，类似Tern.js功能）
-    localCompletionSource,
-    // 2. 文档内容单词补全（替代anyword-hint）
+    // 1. 文档内容单词补全（替代anyword-hint）
     documentWordCompletionSource,
-    // 3. 精简的代码片段补全
+    // 2. 精简的代码片段补全
     minimalJsSnippetCompletionSource
   ],
   defaultKeymap: true,
@@ -437,10 +437,15 @@ export const enhancedJsAutocomplete = autocompletion({
 // 向后兼容的jsAutocomplete导出（使用新的增强版本）
 export const jsAutocomplete = enhancedJsAutocomplete;
 
-// 获取JavaScript语言的补全源，包含原生JavaScript补全和自定义代码片段
-export const jsCompletionSource = javascriptLanguage.data.of({
-  autocomplete: enhancedJsAutocomplete
-});
+// **重要：正确的JavaScript补全扩展，包含CodeMirror 6原生JavaScript补全**
+// 使用javascript()扩展本身，它已经包含了所有JavaScript内置补全功能
+// 然后通过languageData添加我们的额外补全源
+export const jsCompletionExtension = [
+  // JavaScript语言的补全源，注册额外的补全功能到JavaScript语言系统中
+  javascriptLanguage.data.of({
+    autocomplete: [documentWordCompletionSource, minimalJsSnippetCompletionSource]
+  })
+];
 
 // 导出括号高亮匹配扩展
 export const bracketMatchingExtension = bracketMatching();

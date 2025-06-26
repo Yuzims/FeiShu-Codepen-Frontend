@@ -38,7 +38,7 @@ import {
     Toast,
     DebugToggleButton
 } from '../styles/editorStyles';
-import { htmlAutocomplete, cssAutocomplete, enhancedJsAutocomplete, bracketMatchingExtension, closeBracketsExtension } from '../services/autocompleteService';
+import { htmlAutocomplete, cssAutocomplete, jsCompletionExtension, bracketMatchingExtension, closeBracketsExtension } from '../services/autocompleteService';
 import { htmlLint, cssLint, jsLint } from '../services/lintService';
 
 // 创建编辑器的辅助函数
@@ -326,10 +326,15 @@ const Editor: React.FC = () => {
         const newHtmlEditor = createEditor(htmlElement, html(), setHtmlEditor, setHtmlCode, htmlCode, true, htmlAutocomplete, htmlLint);
         const newCssEditor = createEditor(cssElement, css(), setCssEditor, setCssCode, cssCode, true, cssAutocomplete, cssLint);
 
-        const jsExtension = jsLanguage === 'ts' || jsLanguage === 'react'
-            ? javascript({ typescript: true })
-            : javascript();
-        const newJsEditor = createEditor(jsElement, jsExtension, setJsEditor, setJsCode, jsCode, true, enhancedJsAutocomplete, jsLint);
+        // JavaScript扩展包含原生补全功能 + 我们的额外补全源
+        const jsExtension = [
+            jsLanguage === 'ts' || jsLanguage === 'react'
+                ? javascript({ typescript: true })
+                : javascript(),
+            // 添加我们的额外补全功能（文档单词补全和代码片段），不替换原生补全
+            ...jsCompletionExtension
+        ];
+        const newJsEditor = createEditor(jsElement, jsExtension, setJsEditor, setJsCode, jsCode, true, undefined, jsLint);
 
         // 重置重新初始化标志
         setShouldReinitializeEditors(false);
