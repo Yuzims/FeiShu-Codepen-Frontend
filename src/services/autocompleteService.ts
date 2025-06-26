@@ -138,13 +138,17 @@ export const cssSnippetCompletionSource: CompletionSource = (context: Completion
     return null; // 在字符串中不提供补全
   }
 
-  // 检查是否在属性值中（冒号后面）
-  const inPropertyValue = /:\s*[^;]*$/.test(beforeCursor);
+  // 检查是否在属性值中（冒号后面）- 改进的属性名识别
+  const propertyValueMatch = beforeCursor.match(/([a-zA-Z-]+(?:-[a-zA-Z-]+)*)\s*:\s*([^;]*)$/);
+  const inPropertyValue = propertyValueMatch !== null;
 
-  // 如果在属性值中，优先提供单位补全和属性值补全
+  // 如果在属性值中，提供精确的属性值补全
   if (inPropertyValue) {
+    const propertyName = propertyValueMatch[1];
+    const currentValue = propertyValueMatch[2].trim();
+
     // 改进的数字匹配逻辑，避免重复触发
-    const numberMatch = beforeCursor.match(/(\d+(?:\.\d+)?)\s*$/);
+    const numberMatch = currentValue.match(/(\d+(?:\.\d+)?)\s*$/);
     if (numberMatch) {
       const number = numberMatch[1];
       // 检查光标后是否已经有单位，避免重复补全
@@ -155,18 +159,38 @@ export const cssSnippetCompletionSource: CompletionSource = (context: Completion
         return null; // 已经有单位了，不需要补全
       }
 
-      const units = [
-        { label: `${number}px`, insert: 'px', type: 'unit' },
-        { label: `${number}rem`, insert: 'rem', type: 'unit' },
-        { label: `${number}em`, insert: 'em', type: 'unit' },
-        { label: `${number}%`, insert: '%', type: 'unit' },
-        { label: `${number}vw`, insert: 'vw', type: 'unit' },
-        { label: `${number}vh`, insert: 'vh', type: 'unit' },
-        { label: `${number}pt`, insert: 'pt', type: 'unit' },
-        { label: `${number}deg`, insert: 'deg', type: 'unit' },
-        { label: `${number}s`, insert: 's', type: 'unit' },
-        { label: `${number}ms`, insert: 'ms', type: 'unit' }
-      ];
+      // 根据属性类型提供相应的单位
+      const getUnitsForProperty = (prop: string): string[] => {
+        // 长度相关属性
+        if (['width', 'height', 'margin', 'padding', 'border-width', 'font-size', 'line-height',
+             'top', 'right', 'bottom', 'left', 'min-width', 'max-width', 'min-height', 'max-height',
+             'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
+             'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+             'border-radius', 'text-indent', 'letter-spacing', 'word-spacing'].includes(prop)) {
+          return ['px', 'rem', 'em', '%', 'vw', 'vh', 'pt', 'cm', 'mm', 'in'];
+        }
+        // 时间相关属性
+        if (['transition-duration', 'animation-duration', 'animation-delay', 'transition-delay'].includes(prop)) {
+          return ['s', 'ms'];
+        }
+        // 角度相关属性
+        if (['transform', 'rotate', 'skew', 'hue-rotate'].includes(prop)) {
+          return ['deg', 'rad', 'grad', 'turn'];
+        }
+        // 频率相关属性
+        if (['pitch'].includes(prop)) {
+          return ['Hz', 'kHz'];
+        }
+        // 默认长度单位
+        return ['px', 'rem', 'em', '%'];
+      };
+
+      const relevantUnits = getUnitsForProperty(propertyName);
+      const units = relevantUnits.map(unit => ({
+        label: `${number}${unit}`,
+        insert: unit,
+        type: 'unit'
+      }));
 
       return {
         from: context.pos,
@@ -180,71 +204,199 @@ export const cssSnippetCompletionSource: CompletionSource = (context: Completion
       };
     }
 
-    // 在属性值中提供常见属性值补全（不带分号）
-    // 获取当前属性名以提供相关的属性值
-    const propertyMatch = beforeCursor.match(/(\w+)\s*:\s*[^;]*$/);
-    let propertyName = '';
-    if (propertyMatch) {
-      propertyName = propertyMatch[1];
-    }
-
-    // 根据属性名提供相应的属性值
-    const getPropertyValues = (prop: string) => {
-      const commonValues: { [key: string]: string[] } = {
-        'display': ['block', 'inline', 'inline-block', 'flex', 'inline-flex', 'grid', 'inline-grid', 'table', 'table-cell', 'none'],
+    // 完善的属性值映射表
+    const getPropertyValues = (prop: string): string[] => {
+      const propertyValues: { [key: string]: string[] } = {
+        // 显示和布局
+        'display': ['block', 'inline', 'inline-block', 'flex', 'inline-flex', 'grid', 'inline-grid', 
+                   'table', 'table-cell', 'table-row', 'table-column', 'list-item', 'none'],
         'position': ['static', 'relative', 'absolute', 'fixed', 'sticky'],
+        'float': ['left', 'right', 'none'],
+        'clear': ['left', 'right', 'both', 'none'],
+        'visibility': ['visible', 'hidden', 'collapse'],
+        'box-sizing': ['content-box', 'border-box'],
+        'overflow': ['visible', 'hidden', 'scroll', 'auto'],
+        'overflow-x': ['visible', 'hidden', 'scroll', 'auto'],
+        'overflow-y': ['visible', 'hidden', 'scroll', 'auto'],
+        'resize': ['none', 'both', 'horizontal', 'vertical'],
+
+        // 文本相关
         'text-align': ['left', 'right', 'center', 'justify', 'start', 'end'],
+        'text-decoration': ['none', 'underline', 'overline', 'line-through'],
+        'text-decoration-line': ['none', 'underline', 'overline', 'line-through'],
+        'text-decoration-style': ['solid', 'double', 'dotted', 'dashed', 'wavy'],
+        'text-transform': ['none', 'uppercase', 'lowercase', 'capitalize'],
+        'white-space': ['normal', 'nowrap', 'pre', 'pre-wrap', 'pre-line'],
+        'word-wrap': ['normal', 'break-word'],
+        'word-break': ['normal', 'break-all', 'keep-all', 'break-word'],
+        'vertical-align': ['baseline', 'top', 'middle', 'bottom', 'text-top', 'text-bottom', 'sub', 'super'],
+        'direction': ['ltr', 'rtl'],
+        'unicode-bidi': ['normal', 'embed', 'bidi-override'],
+
+        // 字体相关
         'font-weight': ['normal', 'bold', 'bolder', 'lighter', '100', '200', '300', '400', '500', '600', '700', '800', '900'],
         'font-style': ['normal', 'italic', 'oblique'],
-        'text-decoration': ['none', 'underline', 'overline', 'line-through'],
-        'text-transform': ['none', 'uppercase', 'lowercase', 'capitalize'],
-        'color': ['red', 'blue', 'green', 'black', 'white', 'gray', 'transparent', 'inherit', 'currentColor'],
-        'background-color': ['transparent', 'white', 'black', 'red', 'blue', 'green', 'gray', 'inherit'],
-        'border-style': ['none', 'solid', 'dashed', 'dotted', 'double', 'groove', 'ridge', 'inset', 'outset'],
-        'overflow': ['visible', 'hidden', 'scroll', 'auto'],
-        'white-space': ['normal', 'nowrap', 'pre', 'pre-wrap', 'pre-line'],
-        'vertical-align': ['baseline', 'top', 'middle', 'bottom', 'text-top', 'text-bottom'],
-        'flex-direction': ['row', 'row-reverse', 'column', 'column-reverse'],
-        'justify-content': ['flex-start', 'flex-end', 'center', 'space-between', 'space-around', 'space-evenly'],
-        'align-items': ['stretch', 'flex-start', 'flex-end', 'center', 'baseline'],
-        'background-repeat': ['repeat', 'repeat-x', 'repeat-y', 'no-repeat'],
+        'font-variant': ['normal', 'small-caps'],
+        'font-stretch': ['normal', 'ultra-condensed', 'extra-condensed', 'condensed', 'semi-condensed', 
+                        'semi-expanded', 'expanded', 'extra-expanded', 'ultra-expanded'],
+
+        // 背景相关
+        'background-repeat': ['repeat', 'repeat-x', 'repeat-y', 'no-repeat', 'space', 'round'],
         'background-size': ['auto', 'cover', 'contain'],
         'background-position': ['left', 'center', 'right', 'top', 'bottom'],
-        'cursor': ['auto', 'pointer', 'text', 'move', 'not-allowed', 'grab', 'grabbing'],
-        'visibility': ['visible', 'hidden', 'collapse']
+        'background-attachment': ['scroll', 'fixed', 'local'],
+        'background-origin': ['padding-box', 'border-box', 'content-box'],
+        'background-clip': ['border-box', 'padding-box', 'content-box', 'text'],
+
+        // 边框相关
+        'border-style': ['none', 'solid', 'dashed', 'dotted', 'double', 'groove', 'ridge', 'inset', 'outset'],
+        'border-top-style': ['none', 'solid', 'dashed', 'dotted', 'double', 'groove', 'ridge', 'inset', 'outset'],
+        'border-right-style': ['none', 'solid', 'dashed', 'dotted', 'double', 'groove', 'ridge', 'inset', 'outset'],
+        'border-bottom-style': ['none', 'solid', 'dashed', 'dotted', 'double', 'groove', 'ridge', 'inset', 'outset'],
+        'border-left-style': ['none', 'solid', 'dashed', 'dotted', 'double', 'groove', 'ridge', 'inset', 'outset'],
+        'border-collapse': ['separate', 'collapse'],
+
+        // Flexbox
+        'flex-direction': ['row', 'row-reverse', 'column', 'column-reverse'],
+        'flex-wrap': ['nowrap', 'wrap', 'wrap-reverse'],
+        'justify-content': ['flex-start', 'flex-end', 'center', 'space-between', 'space-around', 'space-evenly'],
+        'align-items': ['stretch', 'flex-start', 'flex-end', 'center', 'baseline'],
+        'align-content': ['stretch', 'flex-start', 'flex-end', 'center', 'space-between', 'space-around'],
+        'align-self': ['auto', 'stretch', 'flex-start', 'flex-end', 'center', 'baseline'],
+
+                 // Grid
+         'grid-auto-flow': ['row', 'column', 'dense'],
+         'justify-items': ['start', 'end', 'center', 'stretch'],
+         'justify-self': ['auto', 'start', 'end', 'center', 'stretch'],
+
+        // 列表相关
+        'list-style-type': ['disc', 'circle', 'square', 'decimal', 'decimal-leading-zero', 'lower-roman', 
+                           'upper-roman', 'lower-greek', 'lower-latin', 'upper-latin', 'armenian', 'georgian', 'none'],
+        'list-style-position': ['inside', 'outside'],
+
+        // 表格相关
+        'table-layout': ['auto', 'fixed'],
+        'border-spacing': ['separate', 'collapse'],
+        'caption-side': ['top', 'bottom'],
+        'empty-cells': ['show', 'hide'],
+
+        // 变换和动画
+        'transform-style': ['flat', 'preserve-3d'],
+        'transform-origin': ['left', 'center', 'right', 'top', 'bottom'],
+        'backface-visibility': ['visible', 'hidden'],
+        'perspective-origin': ['left', 'center', 'right', 'top', 'bottom'],
+        'animation-direction': ['normal', 'reverse', 'alternate', 'alternate-reverse'],
+        'animation-fill-mode': ['none', 'forwards', 'backwards', 'both'],
+        'animation-play-state': ['running', 'paused'],
+        'animation-timing-function': ['linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out', 'step-start', 'step-end'],
+        'transition-timing-function': ['linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out', 'step-start', 'step-end'],
+
+        // 用户界面
+        'cursor': ['auto', 'default', 'pointer', 'text', 'wait', 'help', 'move', 'crosshair', 'not-allowed', 
+                  'grab', 'grabbing', 'zoom-in', 'zoom-out', 'copy', 'alias', 'context-menu', 'cell', 
+                  'vertical-text', 'alias', 'progress', 'no-drop', 'col-resize', 'row-resize'],
+        'pointer-events': ['auto', 'none', 'visiblePainted', 'visibleFill', 'visibleStroke', 'visible', 'painted', 'fill', 'stroke', 'all'],
+        'user-select': ['auto', 'text', 'none', 'contain', 'all'],
+
+        // 颜色和透明度
+        'color': ['red', 'blue', 'green', 'black', 'white', 'gray', 'yellow', 'orange', 'purple', 'pink', 
+                 'brown', 'cyan', 'magenta', 'lime', 'navy', 'teal', 'silver', 'transparent', 'currentColor'],
+        'background-color': ['transparent', 'white', 'black', 'red', 'blue', 'green', 'gray', 'yellow', 
+                            'orange', 'purple', 'pink', 'brown', 'cyan', 'magenta', 'lime', 'navy', 'teal', 'silver'],
+        'border-color': ['transparent', 'currentColor', 'red', 'blue', 'green', 'black', 'white', 'gray'],
+
+        // CSS Grid特定属性
+        'grid-template-columns': ['none', 'repeat()', 'minmax()', 'fit-content()', 'auto', 'min-content', 'max-content'],
+        'grid-template-rows': ['none', 'repeat()', 'minmax()', 'fit-content()', 'auto', 'min-content', 'max-content'],
+
+        // 打印相关
+        'page-break-before': ['auto', 'always', 'avoid', 'left', 'right'],
+        'page-break-after': ['auto', 'always', 'avoid', 'left', 'right'],
+        'page-break-inside': ['auto', 'avoid'],
+
+        // 其他常用属性
+        'object-fit': ['fill', 'contain', 'cover', 'none', 'scale-down'],
+        'object-position': ['left', 'center', 'right', 'top', 'bottom'],
+        'mix-blend-mode': ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge', 
+                          'color-burn', 'hard-light', 'soft-light', 'difference', 'exclusion', 'hue', 
+                          'saturation', 'color', 'luminosity'],
+        'isolation': ['auto', 'isolate'],
+        'writing-mode': ['horizontal-tb', 'vertical-rl', 'vertical-lr'],
+        'text-orientation': ['mixed', 'upright', 'sideways']
       };
 
-      return commonValues[prop] || [];
+      return propertyValues[prop] || [];
     };
 
-    // 通用常见属性值（适用于多个属性）
-    const commonPropertyValues = [
-      'auto', 'none', 'inherit', 'initial', 'unset', 'normal', 'bold', 'center', 'left', 'right',
-      'top', 'bottom', 'middle', 'block', 'inline', 'flex', 'grid', 'absolute', 'relative',
-      'fixed', 'static', 'hidden', 'visible', 'transparent', 'solid', 'pointer', 'text'
-    ];
+    // 获取CSS函数值
+    const getCSSFunctions = (prop: string): string[] => {
+      const functions: { [key: string]: string[] } = {
+        'background-image': ['url()', 'linear-gradient()', 'radial-gradient()', 'repeating-linear-gradient()', 'repeating-radial-gradient()'],
+        'transform': ['translate()', 'translateX()', 'translateY()', 'scale()', 'scaleX()', 'scaleY()', 
+                     'rotate()', 'skew()', 'skewX()', 'skewY()', 'matrix()', 'perspective()'],
+        'filter': ['blur()', 'brightness()', 'contrast()', 'grayscale()', 'hue-rotate()', 'invert()', 
+                  'opacity()', 'saturate()', 'sepia()', 'drop-shadow()'],
+        'color': ['rgb()', 'rgba()', 'hsl()', 'hsla()', 'var()'],
+        'background-color': ['rgb()', 'rgba()', 'hsl()', 'hsla()', 'var()'],
+        'border-color': ['rgb()', 'rgba()', 'hsl()', 'hsla()', 'var()'],
+        'width': ['calc()', 'min()', 'max()', 'clamp()', 'var()'],
+        'height': ['calc()', 'min()', 'max()', 'clamp()', 'var()'],
+        'font-family': ['var()'],
+        'content': ['attr()', 'counter()', 'url()']
+      };
 
-    // 获取特定属性的值和通用值
+      return functions[prop] || [];
+    };
+
+    // 严格过滤：只返回与当前属性相关的值
     const specificValues = getPropertyValues(propertyName);
-    const allValues = [...specificValues, ...commonPropertyValues.filter(v => !specificValues.includes(v))];
+    const cssFunctions = getCSSFunctions(propertyName);
+    const allRelevantValues = [...specificValues, ...cssFunctions];
 
-    // 过滤匹配的值
-    const matchedValues = allValues.filter(value => 
-      value.toLowerCase().startsWith(word.text.toLowerCase())
-    );
+    // 根据用户输入进行过滤
+    const filteredValues = allRelevantValues.filter(value => {
+      if (!word.text) return true; // 如果没有输入，显示所有相关值
+      return value.toLowerCase().startsWith(word.text.toLowerCase());
+    });
 
-    if (matchedValues.length > 0) {
+    if (filteredValues.length > 0) {
       return {
         from: word.from,
-        options: matchedValues.map(value => ({
+        options: filteredValues.map(value => ({
           label: value,
-          apply: value, // 属性值不带分号
+          apply: value,
           type: 'value',
-          boost: specificValues.includes(value) ? 10 : 0 // 特定属性值优先级更高
+          boost: specificValues.includes(value) ? 15 : 10 // CSS函数稍低优先级
         })),
         validFor: /\w*/
       };
     }
+
+    // 如果没有找到特定值，且输入较短，不显示任何补全避免干扰
+    if (word.text.length < 2) {
+      return null;
+    }
+
+    // 对于未知属性，只提供最通用的值
+    const fallbackValues = ['auto', 'none', 'inherit', 'initial', 'unset'];
+    const filteredFallback = fallbackValues.filter(value => 
+      value.toLowerCase().startsWith(word.text.toLowerCase())
+    );
+
+    if (filteredFallback.length > 0) {
+      return {
+        from: word.from,
+        options: filteredFallback.map(value => ({
+          label: value,
+          apply: value,
+          type: 'value',
+          boost: 5 // 较低优先级
+        })),
+        validFor: /\w*/
+      };
+    }
+
+    return null; // 完全不匹配时不显示任何选项
   }
 
   // 改进的CSS属性补全，确保所有属性都有分号
@@ -299,41 +451,9 @@ export const cssSnippetCompletionSource: CompletionSource = (context: Completion
     })
   );
 
-  // 常用CSS值补全
-  const cssValues = [];
-  
-  // 根据属性上下文提供特定值
-  const propertyContext = beforeCursor.match(/(\w+(?:-\w+)*)\s*:\s*[^;]*$/);
-  if (propertyContext) {
-    const property: string = propertyContext[1];
-    
-    // 为特定属性提供常用值
-    const propertyValues: Record<string, string[]> = {
-      'display': ['block', 'inline', 'inline-block', 'flex', 'grid', 'none'],
-      'position': ['static', 'relative', 'absolute', 'fixed', 'sticky'],
-      'text-align': ['left', 'center', 'right', 'justify'],
-      'font-weight': ['normal', 'bold', '100', '200', '300', '400', '500', '600', '700', '800', '900'],
-      'cursor': ['pointer', 'default', 'text', 'wait', 'help', 'not-allowed'],
-      'overflow': ['visible', 'hidden', 'scroll', 'auto'],
-      'flex-direction': ['row', 'column', 'row-reverse', 'column-reverse'],
-      'justify-content': ['flex-start', 'flex-end', 'center', 'space-between', 'space-around', 'space-evenly'],
-      'align-items': ['stretch', 'flex-start', 'flex-end', 'center', 'baseline']
-    };
-
-    if (propertyValues[property]) {
-      cssValues.push(...propertyValues[property].map((value: string) => 
-        snippetCompletion(`${value};`, { 
-          label: value, 
-          type: 'value',
-          boost: 5
-        })
-      ));
-    }
-  }
-
   return {
     from: word.from,
-    options: [...cssSnippets, ...cssValues],
+    options: cssSnippets,
     validFor: /^[\w-]*$/
   };
 };
