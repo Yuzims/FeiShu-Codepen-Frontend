@@ -326,15 +326,13 @@ const Editor: React.FC = () => {
         const newHtmlEditor = createEditor(htmlElement, html(), setHtmlEditor, setHtmlCode, htmlCode, true, htmlAutocomplete, htmlLint);
         const newCssEditor = createEditor(cssElement, css(), setCssEditor, setCssCode, cssCode, true, cssAutocomplete, cssLint);
 
-        // JavaScript扩展包含原生补全功能 + 我们的额外补全源
-        const jsExtension = [
-            jsLanguage === 'ts' || jsLanguage === 'react'
-                ? javascript({ typescript: true })
-                : javascript(),
-            // 添加我们的额外补全功能（文档单词补全和代码片段），不替换原生补全
-            ...jsCompletionExtension
-        ];
-        const newJsEditor = createEditor(jsElement, jsExtension, setJsEditor, setJsCode, jsCode, true, undefined, jsLint);
+        // JavaScript编辑器 - 正确配置自动补全
+        const jsExtension = jsLanguage === 'ts' || jsLanguage === 'react'
+            ? javascript({ typescript: true })
+            : javascript();
+        
+        // 使用createEditor的autocompleteExt参数来传递JavaScript补全扩展
+        const newJsEditor = createEditor(jsElement, jsExtension, setJsEditor, setJsCode, jsCode, true, jsCompletionExtension[0], jsLint);
 
         // 重置重新初始化标志
         setShouldReinitializeEditors(false);
